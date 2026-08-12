@@ -16,11 +16,16 @@
         height: 100%;
         overflow: hidden;
         background: #050508;
+        /* 끌어서 조종할 때 부모 페이지가 스크롤되거나 당겨 새로고침되지 않게 */
+        overscroll-behavior: none;
       }
       #game {
         display: block;
         margin: 0 auto;
         image-rendering: auto;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
       }
     </style>
   </head>

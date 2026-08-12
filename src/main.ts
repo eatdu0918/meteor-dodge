@@ -23,11 +23,14 @@ import {
   updateMeteor,
 } from './meteor';
 import { circleCollision, Player } from './player';
+import { VirtualStick } from './touch';
 import {
   drawGameOver,
   drawHUD,
   drawSectorNotice,
   drawTitle,
+  drawTouchStick,
+  hitTestBackButton,
   hitTestDifficultyCard,
 } from './ui';
 
@@ -60,6 +63,12 @@ function loadAllHighScores(): Record<DifficultyLevel, number> {
 }
 
 const keys = new Set<string>();
+const stick = new VirtualStick();
+stick.attach(canvas);
+
+/** 터치가 주 입력인 기기 — 화면 안내를 키보드 대신 손가락 기준으로 바꾼다 */
+const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+
 const player = new Player();
 const spawner = new Spawner();
 const starfield = new Starfield(280, GAME_WIDTH, GAME_HEIGHT);
@@ -84,6 +93,7 @@ function currentHighScore(): number {
 function resetGame(): void {
   player.reset();
   spawner.reset();
+  stick.reset();
   meteors = [];
   elapsed = 0;
   explosionTime = 0;
@@ -223,7 +233,8 @@ canvas.addEventListener('click', (e) => {
   }
 
   if (state === 'gameover') {
-    startGame();
+    if (hitTestBackButton(x, y)) goToTitle();
+    else startGame();
   }
 });
 
@@ -245,7 +256,7 @@ function tick(now: number): void {
     }
     if (sectorNoticeAlpha > 0) sectorNoticeAlpha -= dt * 0.8;
 
-    player.update(dt, keys);
+    player.update(dt, keys, stick.dir);
 
     const intervalMult = getSpawnIntervalMultiplier(elapsed);
     const effectiveInterval = config.spawnInterval * intervalMult;
@@ -299,7 +310,7 @@ function tick(now: number): void {
   }
 
   if (state === 'title') {
-    drawTitle(ctx, selectedLevel, highScores);
+    drawTitle(ctx, selectedLevel, highScores, isTouchDevice);
   } else if (state === 'playing') {
     const config = getDifficulty(elapsed, selectedLevel);
     drawHUD(
@@ -311,6 +322,9 @@ function tick(now: number): void {
       selectedLevel,
     );
     drawSectorNotice(ctx, lastSector, sectorNoticeAlpha);
+    if (stick.anchor && stick.knob) {
+      drawTouchStick(ctx, stick.anchor, stick.knob, stick.radius);
+    }
   } else if (state === 'gameover') {
     drawGameOver(
       ctx,
@@ -319,6 +333,7 @@ function tick(now: number): void {
       currentHighScore(),
       isNewRecord,
       selectedLevel,
+      isTouchDevice,
     );
   }
 

@@ -1,4 +1,4 @@
-import { GAME_HEIGHT, GAME_WIDTH, WORLD_SCALE } from './constants';
+import { GAME_HEIGHT, GAME_WIDTH, Vec2, WORLD_SCALE } from './constants';
 import { sc } from './scale';
 
 /** Visual & hitbox scale relative to base design */
@@ -26,14 +26,20 @@ export class Player {
     this.angle = -Math.PI / 2;
   }
 
-  update(dt: number, keys: Set<string>): void {
+  /** stick 이 있으면(터치 조종 중) 키보드 대신 그 방향을 따른다 */
+  update(dt: number, keys: Set<string>, stick: Vec2 | null = null): void {
     let dx = 0;
     let dy = 0;
 
-    if (keys.has('ArrowLeft') || keys.has('a') || keys.has('A')) dx -= 1;
-    if (keys.has('ArrowRight') || keys.has('d') || keys.has('D')) dx += 1;
-    if (keys.has('ArrowUp') || keys.has('w') || keys.has('W')) dy -= 1;
-    if (keys.has('ArrowDown') || keys.has('s') || keys.has('S')) dy += 1;
+    if (stick) {
+      dx = stick.x;
+      dy = stick.y;
+    } else {
+      if (keys.has('ArrowLeft') || keys.has('a') || keys.has('A')) dx -= 1;
+      if (keys.has('ArrowRight') || keys.has('d') || keys.has('D')) dx += 1;
+      if (keys.has('ArrowUp') || keys.has('w') || keys.has('W')) dy -= 1;
+      if (keys.has('ArrowDown') || keys.has('s') || keys.has('S')) dy += 1;
+    }
 
     if (dx !== 0 || dy !== 0) {
       const len = Math.hypot(dx, dy);

@@ -1,10 +1,10 @@
-import { GAME_HEIGHT, GAME_WIDTH, UI_SCALE } from './constants';
+import { GAME_HEIGHT, GAME_WIDTH, UI_SCALE, Vec2 } from './constants';
 import {
   DIFFICULTY_PRESETS,
   DifficultyLevel,
   getDifficultyPreset,
 } from './difficulty-level';
-import { ui as uiPx } from './scale';
+import { sc, ui as uiPx } from './scale';
 
 export interface DifficultyCardLayout {
   level: DifficultyLevel;
@@ -39,6 +39,20 @@ export function hitTestDifficultyCard(x: number, y: number): DifficultyLevel | n
     }
   }
   return null;
+}
+
+/**
+ * 게임오버 화면 좌상단의 '난이도 선택' 버튼.
+ * ESC 를 누를 수 없는 터치 기기에서 난이도를 다시 고를 유일한 통로다.
+ */
+export function getBackButtonRect(): { x: number; y: number; w: number; h: number } {
+  const u = UI_SCALE;
+  return { x: uiPx(20, u), y: uiPx(20, u), w: uiPx(150, u), h: uiPx(48, u) };
+}
+
+export function hitTestBackButton(x: number, y: number): boolean {
+  const r = getBackButtonRect();
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 }
 
 function drawDifficultyCard(
@@ -81,6 +95,7 @@ export function drawTitle(
   ctx: CanvasRenderingContext2D,
   selectedLevel: DifficultyLevel,
   highScores: Record<DifficultyLevel, number>,
+  touch: boolean,
 ): void {
   const u = UI_SCALE;
   ctx.textAlign = 'center';
@@ -107,11 +122,44 @@ export function drawTitle(
 
   ctx.fillStyle = '#4fc3f7';
   ctx.font = uiPx(18, u) + 'px system-ui, sans-serif';
-  ctx.fillText('← → 또는 1·2·3 · SPACE로 시작', GAME_WIDTH / 2, GAME_HEIGHT / 2 + uiPx(160, u));
+  ctx.fillText(
+    touch ? '난이도 카드를 눌러 시작' : '← → 또는 1·2·3 · SPACE로 시작',
+    GAME_WIDTH / 2,
+    GAME_HEIGHT / 2 + uiPx(160, u),
+  );
 
   ctx.fillStyle = '#8888a0';
   ctx.font = uiPx(16, u) + 'px system-ui, sans-serif';
-  ctx.fillText('방향키 / WASD — 이동', GAME_WIDTH / 2, GAME_HEIGHT / 2 + uiPx(195, u));
+  ctx.fillText(
+    touch ? '화면을 손가락으로 끌어 조종' : '방향키 / WASD — 이동',
+    GAME_WIDTH / 2,
+    GAME_HEIGHT / 2 + uiPx(195, u),
+  );
+}
+
+/** 조종 중인 가상 스틱 — 손가락이 잡은 자리와 기운 방향을 보여 준다 */
+export function drawTouchStick(
+  ctx: CanvasRenderingContext2D,
+  anchor: Vec2,
+  knob: Vec2,
+  radius: number,
+): void {
+  ctx.save();
+
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = '#4fc3f7';
+  ctx.lineWidth = sc(2);
+  ctx.beginPath();
+  ctx.arc(anchor.x, anchor.y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = '#4fc3f7';
+  ctx.beginPath();
+  ctx.arc(knob.x, knob.y, sc(24), 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
 }
 
 export function drawHUD(
@@ -155,6 +203,7 @@ export function drawGameOver(
   highScore: number,
   isNewRecord: boolean,
   level: DifficultyLevel,
+  touch: boolean,
 ): void {
   const u = UI_SCALE;
   const preset = getDifficultyPreset(level);
@@ -189,11 +238,39 @@ export function drawGameOver(
 
   ctx.fillStyle = '#4fc3f7';
   ctx.font = uiPx(20, u) + 'px system-ui, sans-serif';
-  ctx.fillText('R / SPACE — 재시작', GAME_WIDTH / 2, GAME_HEIGHT / 2 + uiPx(115, u));
+  ctx.fillText(
+    touch ? '화면을 누르면 재시작' : 'R / SPACE — 재시작',
+    GAME_WIDTH / 2,
+    GAME_HEIGHT / 2 + uiPx(115, u),
+  );
 
-  ctx.fillStyle = '#8888a0';
-  ctx.font = uiPx(16, u) + 'px system-ui, sans-serif';
-  ctx.fillText('ESC — 난이도 선택', GAME_WIDTH / 2, GAME_HEIGHT / 2 + uiPx(150, u));
+  if (!touch) {
+    ctx.fillStyle = '#8888a0';
+    ctx.font = uiPx(16, u) + 'px system-ui, sans-serif';
+    ctx.fillText('ESC — 난이도 선택', GAME_WIDTH / 2, GAME_HEIGHT / 2 + uiPx(150, u));
+  }
+
+  drawBackButton(ctx);
+}
+
+function drawBackButton(ctx: CanvasRenderingContext2D): void {
+  const u = UI_SCALE;
+  const r = getBackButtonRect();
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.strokeStyle = '#44445a';
+  ctx.lineWidth = uiPx(1.5, u);
+  ctx.beginPath();
+  ctx.roundRect(r.x, r.y, r.w, r.h, uiPx(10, u));
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#c8c8d8';
+  ctx.font = 'bold ' + uiPx(16, u) + 'px system-ui, sans-serif';
+  ctx.fillText('← 난이도 선택', r.x + r.w / 2, r.y + r.h / 2);
+  ctx.textBaseline = 'alphabetic';
 }
 
 export function drawSectorNotice(ctx: CanvasRenderingContext2D, sector: number, alpha: number): void {
