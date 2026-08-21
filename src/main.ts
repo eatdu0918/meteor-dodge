@@ -23,6 +23,15 @@ import {
   updateMeteor,
 } from './meteor';
 import { circleCollision, Player } from './player';
+import {
+  installMirrorBridge,
+  isSpectateMode,
+  packMeteor,
+  unpackMeteor,
+  r1,
+  r3,
+  type MeteorDodgeSnapshot,
+} from './mirror';
 import { VirtualStick } from './touch';
 import {
   drawGameOver,
@@ -64,7 +73,16 @@ function loadAllHighScores(): Record<DifficultyLevel, number> {
 
 const keys = new Set<string>();
 const stick = new VirtualStick();
-stick.attach(canvas);
+
+/**
+ * OBS 송출 화면으로 뜬 것인가 (mirror.ts 참고).
+ *
+ * 켜져 있으면 **그리기만** 남긴다 — 조종도 운석 생성도 없다. 방송 화면이 자기 판을
+ * 따로 돌리면 스트리머 화면과 어긋나므로, 여기 판은 오직 apply() 로만 바뀐다.
+ */
+const spectate = isSpectateMode();
+
+if (!spectate) stick.attach(canvas);
 
 /** 터치가 주 입력인 기기 — 화면 안내를 키보드 대신 손가락 기준으로 바꾼다 */
 const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
@@ -187,6 +205,9 @@ window.addEventListener(
   { capture: true },
 );
 
+if (!spectate) attachInput();
+
+function attachInput(): void {
 window.addEventListener('keydown', (e) => {
   keys.add(e.key);
 
@@ -237,13 +258,18 @@ canvas.addEventListener('click', (e) => {
     else startGame();
   }
 });
+}
 
 let lastTime = performance.now();
 
-function tick(now: number): void {
-  const dt = Math.min((now - lastTime) / 1000, 0.05);
-  lastTime = now;
-
+/**
+ * 판을 한 칸 굴린다.
+ *
+ * 방송 화면(관전 모드)은 이걸 부르지 않는다 — 판은 스트리머 화면이 굴린 결과가
+ * 스냅샷으로 온다. 여기서 또 굴리면 두 화면이 어긋난다.
+ */
+function update(dt: number): void {
+  // 별밭은 장식이라 방송 화면도 자기 것을 자기가 굴린다 (mirror.ts 주석)
   starfield.update(dt, GAME_WIDTH, GAME_HEIGHT);
 
   if (state === 'playing') {
@@ -293,7 +319,10 @@ function tick(now: number): void {
   if (state === 'gameover' && explosionTime > 0) {
     explosionTime += dt;
   }
+}
 
+/** 지금 값으로 한 장 그린다 — 굴리기와 갈라 두어 방송 화면이 이것만 부를 수 있게 */
+function draw(): void {
   drawBackground(ctx, GAME_WIDTH, GAME_HEIGHT);
   starfield.draw(ctx);
 
@@ -337,7 +366,68 @@ function tick(now: number): void {
     );
   }
 
+}
+
+function tick(now: number): void {
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+  update(dt);
+  draw();
   requestAnimationFrame(tick);
 }
 
-requestAnimationFrame(tick);
+/**
+ * OBS 송출 화면과 주고받는 창구.
+ *
+ * `capture` 가 시작 화면(title)에서 null 을 내는 이유: 방송에 내보낼 판이 아직 없다.
+ * 「송출 화면이 없는 게임」의 기본값이 「비우기」인 것과 같은 판단이다 — 방송 화면에
+ * 엉뚱한 것이 떠 있는 쪽이 빈 것보다 위험하다. 끝난 판(gameover)은 결과를 보여 줘야
+ * 하므로 보낸다.
+ */
+installMirrorBridge({
+  capture: (): MeteorDodgeSnapshot | null => {
+    if (state === 'title') return null;
+    return {
+      state,
+      level: selectedLevel,
+      highScores,
+      elapsed: r3(elapsed),
+      meteors: meteors.map(packMeteor),
+      player: [r1(player.x), r1(player.y), r3(player.angle)],
+      boom: explosionTime > 0 ? [r3(explosionTime), r1(explosionX), r1(explosionY)] : null,
+      sector: lastSector,
+      sectorAlpha: r3(sectorNoticeAlpha),
+      finalScore,
+      isNewRecord,
+    };
+  },
+
+  apply: (snapshot: MeteorDodgeSnapshot) => {
+    state = snapshot.state;
+    selectedLevel = snapshot.level;
+    highScores = snapshot.highScores;
+    elapsed = snapshot.elapsed;
+    meteors = snapshot.meteors.map(unpackMeteor);
+    player.x = snapshot.player[0];
+    player.y = snapshot.player[1];
+    player.angle = snapshot.player[2];
+    explosionTime = snapshot.boom ? snapshot.boom[0] : 0;
+    explosionX = snapshot.boom ? snapshot.boom[1] : 0;
+    explosionY = snapshot.boom ? snapshot.boom[2] : 0;
+    lastSector = snapshot.sector;
+    sectorNoticeAlpha = snapshot.sectorAlpha;
+    finalScore = snapshot.finalScore;
+    isNewRecord = snapshot.isNewRecord;
+    // rAF 를 기다리지 않고 여기서 그린다 — 창이 안 보이면 rAF 는 멈추는데(OBS 가
+    // 스로틀할 수 있다) 그릴 재료는 계속 오고 있다. 그리는 빈도가 곧 아는 만큼이다.
+    draw();
+  },
+});
+
+/**
+ * 방송 화면은 판을 굴리지 않으므로 루프를 돌리지 않는다.
+ *
+ * 굴릴 것이 없는데 60Hz 로 도는 것은 OBS 안에서 그대로 낭비이고, 20Hz 로 오는 스냅샷을
+ * 60Hz 로 다시 그려 봐야 같은 장면을 세 번 그릴 뿐이다.
+ */
+if (!spectate) requestAnimationFrame(tick);
