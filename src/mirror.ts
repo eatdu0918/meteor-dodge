@@ -31,7 +31,18 @@ import type { GameState, MeteorKind } from './constants';
 const BRIDGE_KEY = 'inbangmoMirror';
 
 /** 배열 자리를 이름 대신 쓰기 위한 순서 — 그리기에서 갈리는 것만 */
-const KINDS: MeteorKind[] = ['small', 'large', 'rotating', 'comet', 'accelerating', 'orbital'];
+const KINDS: MeteorKind[] = [
+  'small',
+  'large',
+  'rotating',
+  'comet',
+  'accelerating',
+  'orbital',
+  // 뒤에만 붙인다 — 앞의 자리를 바꾸면 배포 사이에 색이 어긋난다
+  'basic',
+  'split',
+  'belt',
+];
 
 /** [종류, x, y, 반지름, 회전, 꼬리각, 경고시간] */
 export type PackedMeteor = [number, number, number, number, number, number, number];

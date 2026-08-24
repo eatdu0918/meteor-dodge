@@ -1,4 +1,4 @@
-import { GAME_HEIGHT, GAME_WIDTH, METEOR_DEFS, MeteorKind } from './constants';
+import { GAME_HEIGHT, GAME_WIDTH, METEOR_COLORS, METEOR_DEFS, MeteorKind, MeteorPalette } from './constants';
 import { sc } from './scale';
 
 export interface Meteor {
@@ -361,26 +361,37 @@ export function isOffScreen(m: Meteor): boolean {
   return m.x < -margin || m.x > GAME_WIDTH + margin || m.y < -margin || m.y > GAME_HEIGHT + margin;
 }
 
+/**
+ * 운석 한 개.
+ *
+ * 배경(거의 검은 우주)과 섞이지 않게 세 겹으로 그린다.
+ *  1) 뒤에 까는 열기 — 어떤 배경 위에서도 운석 둘레에 경계가 생긴다
+ *  2) 몸통보다 밝은 테두리 — 실루엣이 별밭에 먹히지 않는다
+ *  3) 크레이터 음영 — 별(민무늬 점)과 운석(질감 있는 덩어리)을 눈이 바로 가른다
+ */
 export function drawMeteor(ctx: CanvasRenderingContext2D, m: Meteor): void {
   if (m.warnTime > 0) {
     drawWarn(ctx, m);
     return;
   }
 
+  const colors = METEOR_COLORS[m.kind];
+
   ctx.save();
   ctx.translate(m.x, m.y);
+  drawGlow(ctx, m.kind, m.radius);
   ctx.rotate(m.rotation);
 
   switch (m.kind) {
     case 'small':
-      drawRock(ctx, m.radius, '#a0a0b0', 5);
+      drawRock(ctx, m.radius, colors, 5);
       break;
     case 'large':
-      drawRock(ctx, m.radius, '#6b5b4f', 8);
+      drawRock(ctx, m.radius, colors, 8);
       break;
     case 'rotating':
-      drawRock(ctx, m.radius, '#9e9eaa', 6);
-      ctx.strokeStyle = '#bdbdbd';
+      drawRock(ctx, m.radius, colors, 6);
+      ctx.strokeStyle = colors.rim;
       ctx.lineWidth = sc(2);
       ctx.beginPath();
       ctx.moveTo(-m.radius * 0.6, 0);
@@ -391,22 +402,67 @@ export function drawMeteor(ctx: CanvasRenderingContext2D, m: Meteor): void {
       drawComet(ctx, m);
       break;
     default:
-      drawRock(ctx, m.radius, '#8d8d9a', 6);
+      drawRock(ctx, m.radius, colors, 6);
   }
 
   ctx.restore();
 }
 
+/**
+ * 열기(glow) 스프라이트.
+ *
+ * 판에 운석이 마흔 개까지 뜨므로 매 프레임 그라디언트를 새로 만들면 그리기가 밀린다.
+ * 종류·반지름이 정해져 있으니 한 번 그려 두고 그림으로 얹는다.
+ */
+const glowCache = new Map<string, HTMLCanvasElement>();
+
+function glowSprite(kind: MeteorKind, radius: number): HTMLCanvasElement {
+  const key = `${kind}:${Math.round(radius)}`;
+  const cached = glowCache.get(key);
+  if (cached) return cached;
+
+  const outer = radius * 2.2;
+  const size = Math.ceil(outer * 2);
+  const cv = document.createElement('canvas');
+  cv.width = size;
+  cv.height = size;
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(outer, outer, radius * 0.6, outer, outer, outer);
+  grad.addColorStop(0, METEOR_COLORS[kind].glow);
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+
+  glowCache.set(key, cv);
+  return cv;
+}
+
+function drawGlow(ctx: CanvasRenderingContext2D, kind: MeteorKind, radius: number): void {
+  const sprite = glowSprite(kind, radius);
+  ctx.drawImage(sprite, -sprite.width / 2, -sprite.height / 2);
+}
+
 function drawWarn(ctx: CanvasRenderingContext2D, m: Meteor): void {
   const alpha = 0.5 + Math.sin(Date.now() * 0.02) * 0.5;
+  ctx.save();
+  ctx.strokeStyle = `rgba(255, 82, 82, ${alpha})`;
+  ctx.lineWidth = sc(2);
+  ctx.beginPath();
+  ctx.arc(m.x, m.y, sc(14), 0, Math.PI * 2);
+  ctx.stroke();
   ctx.fillStyle = `rgba(255, 82, 82, ${alpha})`;
   ctx.beginPath();
   ctx.arc(m.x, m.y, sc(6), 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
 }
 
-function drawRock(ctx: CanvasRenderingContext2D, r: number, color: string, points: number): void {
-  ctx.fillStyle = color;
+function drawRock(
+  ctx: CanvasRenderingContext2D,
+  r: number,
+  colors: MeteorPalette,
+  points: number,
+): void {
   ctx.beginPath();
   for (let i = 0; i < points; i++) {
     const angle = (i / points) * Math.PI * 2;
@@ -418,10 +474,21 @@ function drawRock(ctx: CanvasRenderingContext2D, r: number, color: string, point
     else ctx.lineTo(px, py);
   }
   ctx.closePath();
+  ctx.fillStyle = colors.body;
   ctx.fill();
-  ctx.strokeStyle = '#5a5a68';
-  ctx.lineWidth = sc(1);
+
+  ctx.strokeStyle = colors.rim;
+  ctx.lineWidth = Math.max(sc(1.5), r * 0.13);
   ctx.stroke();
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI * 2 + 0.7;
+    const dist = r * (0.22 + (i % 2) * 0.2);
+    ctx.beginPath();
+    ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, r * (0.14 + (i % 3) * 0.05), 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawComet(ctx: CanvasRenderingContext2D, m: Meteor): void {
@@ -442,7 +509,7 @@ function drawComet(ctx: CanvasRenderingContext2D, m: Meteor): void {
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = '#fff8e1';
+  ctx.fillStyle = METEOR_COLORS.comet.body;
   ctx.beginPath();
   ctx.arc(0, 0, m.radius, 0, Math.PI * 2);
   ctx.fill();

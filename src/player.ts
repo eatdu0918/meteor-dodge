@@ -4,6 +4,35 @@ import { sc } from './scale';
 /** Visual & hitbox scale relative to base design */
 const PLAYER_SIZE = 0.5;
 
+/** 우주선 아우라 — 매 프레임 그라디언트를 새로 만들지 않도록 한 번만 그려 둔다 */
+const AURA_RADIUS = sc(26) * PLAYER_SIZE;
+let aura: HTMLCanvasElement | null = null;
+
+function auraSprite(): HTMLCanvasElement {
+  if (aura) return aura;
+
+  const size = Math.ceil(AURA_RADIUS * 2);
+  const cv = document.createElement('canvas');
+  cv.width = size;
+  cv.height = size;
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(
+    AURA_RADIUS,
+    AURA_RADIUS,
+    AURA_RADIUS * 0.25,
+    AURA_RADIUS,
+    AURA_RADIUS,
+    AURA_RADIUS,
+  );
+  grad.addColorStop(0, 'rgba(79, 195, 247, 0.34)');
+  grad.addColorStop(1, 'rgba(79, 195, 247, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+
+  aura = cv;
+  return cv;
+}
+
 export class Player {
   x: number;
   y: number;
@@ -63,6 +92,10 @@ export class Player {
     const s = WORLD_SCALE * PLAYER_SIZE;
     ctx.save();
     ctx.translate(this.x, this.y);
+
+    // 운석이 밝아진 만큼 우주선도 자기 자리를 알려야 한다 — 판이 빽빽할 때 놓치지 않게
+    ctx.drawImage(auraSprite(), -AURA_RADIUS, -AURA_RADIUS);
+
     ctx.rotate(this.angle + Math.PI / 2);
 
     if (this.vx !== 0 || this.vy !== 0) {

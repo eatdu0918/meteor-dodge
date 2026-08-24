@@ -100,5 +100,35 @@ export const METEOR_DEFS: Record<MeteorKind, MeteorDef> = Object.fromEntries(
 
 export const HIGH_SCORE_KEY = 'meteor-dodge-high-score';
 
+/**
+ * 운석 색.
+ *
+ * 배경이 거의 검은 우주라 회색 돌은 별밭·배경과 같은 무채색으로 뭉개진다. 그래서 종류마다
+ * 세 가지를 함께 둔다.
+ *  - `body` 배경보다 확실히 밝은 몸통
+ *  - `rim`  몸통보다 더 밝은 테두리 — 배경과 맞닿는 선이 실루엣을 잡아 준다
+ *  - `glow` 뒤에 까는 열기 — 밝은 배경(폭발·경고)에서도 운석 둘레에 경계가 남는다
+ *
+ * 종류별로 색을 갈라 두면 "무엇이 날아오는지"도 눈으로 바로 갈린다(가속=주황, 분열=붉은
+ * 기, 벨트=푸른 강철 …).
+ */
+export interface MeteorPalette {
+  body: string;
+  rim: string;
+  glow: string;
+}
+
+export const METEOR_COLORS: Record<MeteorKind, MeteorPalette> = {
+  basic: { body: '#a89c8e', rim: '#ede2d2', glow: 'rgba(255, 150, 80, 0.26)' },
+  small: { body: '#c2cbdd', rim: '#ffffff', glow: 'rgba(140, 190, 255, 0.26)' },
+  large: { body: '#96705a', rim: '#f3c9a4', glow: 'rgba(255, 110, 55, 0.30)' },
+  rotating: { body: '#a99cc9', rim: '#efe7ff', glow: 'rgba(175, 140, 255, 0.26)' },
+  orbital: { body: '#8fc0ab', rim: '#e2fff2', glow: 'rgba(90, 220, 170, 0.26)' },
+  split: { body: '#c68c8c', rim: '#ffdede', glow: 'rgba(255, 90, 90, 0.28)' },
+  accelerating: { body: '#d0a53a', rim: '#ffeeb0', glow: 'rgba(255, 170, 40, 0.32)' },
+  belt: { body: '#9aa6bd', rim: '#e6efff', glow: 'rgba(120, 165, 235, 0.26)' },
+  comet: { body: '#fff8e1', rim: '#ffffff', glow: 'rgba(255, 200, 90, 0.32)' },
+};
+
 /** Max device pixel ratio cap (performance vs sharpness) */
 export const MAX_DPR = 2;
