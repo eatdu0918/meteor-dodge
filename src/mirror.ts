@@ -44,8 +44,18 @@ const KINDS: MeteorKind[] = [
   'belt',
 ];
 
-/** [종류, x, y, 반지름, 회전, 꼬리각, 경고시간] */
-export type PackedMeteor = [number, number, number, number, number, number, number];
+/**
+ * [종류, x, y, 반지름, 회전, 꼬리각, 경고시간, **번호**]
+ *
+ * 번호(id)는 그리는 데 안 쓰는데도 싣는다 — 방송 화면이 **장과 장 사이를 이어 그릴 때**
+ * 「지난 장의 이 운석이 이번 장의 어느 것인가」를 짚어야 하기 때문이다. 자리(배열 인덱스)로
+ * 짚으면 안 된다: 화면 밖으로 나간 운석을 목록 가운데에서 걷어내면(main.ts 의 filter)
+ * 뒤쪽이 전부 한 칸씩 당겨져, **운석 N 을 운석 N+1 의 자리로 끌어당긴다** — 화면을
+ * 가로지르는 사선 줄무늬가 된다.
+ *
+ * 뒤에 붙인 이유는 KINDS 와 같다 — 앞자리를 밀면 배포 사이에 값이 어긋난다.
+ */
+export type PackedMeteor = [number, number, number, number, number, number, number, number];
 
 export interface MeteorDodgeSnapshot {
   state: GameState;
@@ -81,6 +91,7 @@ export function packMeteor(m: Meteor): PackedMeteor {
     r3(m.rotation),
     r3(m.tailAngle),
     r3(m.warnTime),
+    m.id,
   ];
 }
 
@@ -92,7 +103,7 @@ export function packMeteor(m: Meteor): PackedMeteor {
  */
 export function unpackMeteor(p: PackedMeteor): Meteor {
   return {
-    id: 0,
+    id: p[7] ?? 0,
     kind: KINDS[p[0]] ?? 'small',
     x: p[1],
     y: p[2],
@@ -110,7 +121,82 @@ export function unpackMeteor(p: PackedMeteor): Meteor {
 
 export interface MirrorBridge {
   capture(): MeteorDodgeSnapshot | null;
-  apply(snapshot: MeteorDodgeSnapshot): void;
+  /**
+   * @param hostAt 호스트가 이 장을 뜬 시각(호스트의 performance.now 기준 ms). 되재생의
+   *   시간축이다 — 도착 시각으로 대신하면 망 지연의 흔들림이 그대로 판의 속도가 된다
+   *   (mirror-timeline.ts 머리 주석). 부모가 봉투를 풀어 넣어 준다.
+   */
+  apply(snapshot: MeteorDodgeSnapshot, hostAt?: number | null): void;
+  /**
+   * 가려져도 판이 제 속도로 돌아야 하는가 — 중계 중인 동안 부모가 켜 준다.
+   *
+   * 크롬은 안 보이는 문서의 타이머를 1Hz 로 조인다. 스트리머가 OBS 로 브라우저를 덮으면
+   * 이 임베드도 가려진 것이 되어 **판이 초당 한 칸씩만 나아간다.**
+   */
+  setKeepAlive(on: boolean): void;
+}
+
+/**
+ * 두 장 사이 t(0~1) 지점의 판을 만든다 — 방송 화면이 이어 그릴 때 쓴다.
+ *
+ * 이어 붙이는 것은 **실제로 흐르는 값**뿐이다. 판정·표시에 쓰는 이산값(상태·난이도·
+ * 최고 기록·구역 번호)은 이번 장 것을 그대로 쓴다.
+ *
+ * 세 가지를 조심한다:
+ *   · **운석은 번호로 짚는다.** 자리로 짚으면 중간이 걷어내진 순간 엉뚱한 운석과 이어진다.
+ *   · **경고 중인 운석은 안 움직인다**(warnTime > 0 이면 제자리에서 표식만 뜬다). 이어
+ *     그리면 아직 오지도 않은 운석이 스르르 미끄러진다.
+ *   · **우주선 각도는 ±π 에서 감긴다.** 그냥 이으면 왼쪽↔오른쪽으로 꺾을 때 한 바퀴 돈다.
+ */
+export function lerpMeteorDodge(
+  prevState: unknown,
+  nextState: unknown,
+  t: number,
+): MeteorDodgeSnapshot {
+  const prev = prevState as MeteorDodgeSnapshot;
+  const next = nextState as MeteorDodgeSnapshot;
+  // 판이 갈아엎어진 장면은 이을 수 없다 — 이번 장으로 바로 짚는다
+  if (!prev || prev.state !== next.state || next.elapsed < prev.elapsed) return next;
+
+  const l = (a: number, b: number) => a + (b - a) * t;
+  const prevById = new Map<number, PackedMeteor>();
+  prev.meteors.forEach((m) => prevById.set(m[7], m));
+
+  return {
+    ...next,
+    elapsed: l(prev.elapsed, next.elapsed),
+    sectorAlpha: l(prev.sectorAlpha, next.sectorAlpha),
+    meteors: next.meteors.map((m) => {
+      const p = prevById.get(m[7]);
+      // 경고 중이었거나 지금 경고 중이면 제자리다 — 위치를 잇지 않는다
+      if (!p || p[6] > 0 || m[6] > 0) return m;
+      const out = [...m] as PackedMeteor;
+      out[1] = l(p[1], m[1]);
+      out[2] = l(p[2], m[2]);
+      out[4] = lerpAngle(p[4], m[4], t);
+      out[5] = lerpAngle(p[5], m[5], t);
+      out[6] = l(p[6], m[6]);
+      return out;
+    }),
+    player: [
+      l(prev.player[0], next.player[0]),
+      l(prev.player[1], next.player[1]),
+      lerpAngle(prev.player[2], next.player[2], t),
+    ],
+    boom:
+      prev.boom && next.boom
+        ? [l(prev.boom[0], next.boom[0]), next.boom[1], next.boom[2]]
+        : next.boom,
+  };
+}
+
+/** 각도를 **가까운 쪽으로** 잇는다 — ±π 에서 감기므로 그냥 이으면 먼 길로 돈다 */
+function lerpAngle(a: number, b: number, t: number): number {
+  const TAU = Math.PI * 2;
+  let d = (b - a) % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d < -Math.PI) d += TAU;
+  return a + d * t;
 }
 
 export function installMirrorBridge(bridge: MirrorBridge): void {

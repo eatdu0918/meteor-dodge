@@ -29,13 +29,19 @@ import { circleCollision, Player } from './player';
 import {
   installMirrorBridge,
   isSpectateMode,
+  lerpMeteorDodge,
   packMeteor,
   unpackMeteor,
   r1,
   r3,
   type MeteorDodgeSnapshot,
 } from './mirror';
-import { integrateWithSubsteps, startResilientLoop } from './resilient-loop';
+import { createMirrorTimeline, pushMirrorSample, readMirrorState } from './mirror-timeline';
+import {
+  holdBackgroundKeepAlive,
+  integrateWithSubsteps,
+  startResilientLoop,
+} from './resilient-loop';
 import { VirtualStick } from './touch';
 import {
   drawGameOver,
@@ -107,6 +113,17 @@ let lastSector = 1;
 let sectorNoticeAlpha = 0;
 let finalScore = 0;
 let isNewRecord = false;
+
+/**
+ * 관전(방송 화면) 쪽 되재생 재료.
+ *
+ * 받은 장들을 **호스트가 뜬 시각**을 시간축 삼아 이어 그린다(mirror-timeline.ts). 도착
+ * 시각으로 이으면 망 지연의 흔들림이 그대로 판의 속도가 된다.
+ */
+const specTimeline = createMirrorTimeline();
+let specLastTick = 0;
+/** 걸어 둔 「가려져도 계속」 — 두 번 걸지 않으려고 들고 있는다 */
+let releaseKeepAlive: (() => void) | null = null;
 
 function currentHighScore(): number {
   return highScores[selectedLevel];
@@ -407,7 +424,33 @@ installMirrorBridge({
     };
   },
 
-  apply: (snapshot: MeteorDodgeSnapshot) => {
+  setKeepAlive: (on: boolean) => {
+    if (on) {
+      if (!releaseKeepAlive) releaseKeepAlive = holdBackgroundKeepAlive();
+    } else {
+      releaseKeepAlive?.();
+      releaseKeepAlive = null;
+    }
+  },
+
+  /**
+   * 받은 장을 타임라인에 쌓는다 — 그리는 것은 관전 루프가 한다.
+   *
+   * 여기서 곧바로 그리면 20Hz 끊김이 그대로 방송에 나간다. 대신 호스트가 뜬 시각을
+   * 시간축 삼아, 루프가 장 사이를 이어 그린다(mirror-timeline.ts).
+   */
+  apply: (snapshot: MeteorDodgeSnapshot, hostAt?: number | null) => {
+    const now = performance.now();
+    // 시각을 모르는 장(봉투 없이 온 옛 화면)은 도착 시각으로 대신한다
+    pushMirrorSample(specTimeline, snapshot, hostAt ?? now);
+    // 루프가 안 돌고 있으면(첫 장이거나 rAF·타이머가 둘 다 멎은 환경) 여기서 한 번
+    // 굴린다 — 최악이어도 도착하는 장마다 화면이 나간다(예전 동작).
+    if (now - specLastTick > 35) specTick(now);
+  },
+});
+
+/** 관전 화면이 지금 그려야 할 장을 판에 앉힌다 */
+function applySnapshot(snapshot: MeteorDodgeSnapshot): void {
     state = snapshot.state;
     selectedLevel = snapshot.level;
     highScores = snapshot.highScores;
@@ -423,23 +466,35 @@ installMirrorBridge({
     sectorNoticeAlpha = snapshot.sectorAlpha;
     finalScore = snapshot.finalScore;
     isNewRecord = snapshot.isNewRecord;
-    // rAF 를 기다리지 않고 여기서 그린다 — 창이 안 보이면 rAF 는 멈추는데(OBS 가
-    // 스로틀할 수 있다) 그릴 재료는 계속 오고 있다. 그리는 빈도가 곧 아는 만큼이다.
-    draw();
-  },
-});
+}
 
 /**
- * 방송 화면은 판을 굴리지 않으므로 루프를 돌리지 않는다.
+ * 관전 루프 — 판은 굴리지 않고, 받은 장들을 호스트가 뜬 박자대로 되재생한다.
  *
- * 굴릴 것이 없는데 60Hz 로 도는 것은 OBS 안에서 그대로 낭비이고, 20Hz 로 오는 스냅샷을
- * 60Hz 로 다시 그려 봐야 같은 장면을 세 번 그릴 뿐이다.
+ * 예전에는 장이 도착할 때만 그렸다. 그러면 OBS 가 초당 20장짜리 끊긴 판을 캡처한다 —
+ * 운석은 쉬지 않고 흐르는 판이라 그 끊김이 그대로 보인다. 이제 두 장 사이를 이어
+ * 그린다(lerpMeteorDodge).
  *
- * 굴리는 쪽(여기)은 startResilientLoop 로 돈다 — 탭이 숨겨져도 setInterval 로
- * 넘어가 계속 굴러가고, 부모 화면의 useGameMirrorHost 가 그 진행을 계속 물어가
- * 방송에도 끊기지 않고 전해진다.
+ * 별밭은 여기서도 굴리지 않는다 — 판정에 관여하지 않는 장식이고, 스냅샷에도 안 실린다.
  */
-if (!spectate) startResilientLoop(tick);
+function specTick(now: number): void {
+  if (specLastTick && now - specLastTick < 4) return;
+  specLastTick = now;
+  const snapshot = readMirrorState(specTimeline, now, lerpMeteorDodge) as MeteorDodgeSnapshot | null;
+  if (!snapshot) return;
+  applySnapshot(snapshot);
+  draw();
+}
+
+/**
+ * 어느 쪽이든 같은 루프를 쓴다 — rAF 가 도는 동안은 rAF 로, 창이 가려져 rAF 가 멎으면
+ * 워커 시계로(resilient-loop.ts 머리 주석).
+ *
+ * 관전 화면은 「가려져도 계속」을 스스로 건다 — 이 화면은 존재 이유가 방송 송출이라
+ * 아무도 안 보고 있을 때가 없다. 굴리는 쪽은 중계 중일 때만 부모가 켜 준다(setKeepAlive).
+ */
+if (spectate) holdBackgroundKeepAlive();
+startResilientLoop(spectate ? specTick : tick);
 
 /*
  * 글씨체(Galmuri11)가 도착하면 한 장 다시 그린다.
