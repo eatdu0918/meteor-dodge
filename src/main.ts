@@ -35,6 +35,7 @@ import {
   r3,
   type MeteorDodgeSnapshot,
 } from './mirror';
+import { integrateWithSubsteps, startResilientLoop } from './resilient-loop';
 import { VirtualStick } from './touch';
 import {
   drawGameOver,
@@ -372,11 +373,12 @@ function draw(): void {
 }
 
 function tick(now: number): void {
-  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  const dt = (now - lastTime) / 1000;
   lastTime = now;
-  update(dt);
+  // 탭이 숨겨져도(다른 탭·앱으로 이동) 판이 멎지 않도록, 큰 dt는 잘게 쪼개
+  // update() 를 여러 번 불러 따라잡는다 — 클램프해서 버리지 않는다.
+  integrateWithSubsteps(dt, update, 0.05, 3);
   draw();
-  requestAnimationFrame(tick);
 }
 
 /**
@@ -432,8 +434,12 @@ installMirrorBridge({
  *
  * 굴릴 것이 없는데 60Hz 로 도는 것은 OBS 안에서 그대로 낭비이고, 20Hz 로 오는 스냅샷을
  * 60Hz 로 다시 그려 봐야 같은 장면을 세 번 그릴 뿐이다.
+ *
+ * 굴리는 쪽(여기)은 startResilientLoop 로 돈다 — 탭이 숨겨져도 setInterval 로
+ * 넘어가 계속 굴러가고, 부모 화면의 useGameMirrorHost 가 그 진행을 계속 물어가
+ * 방송에도 끊기지 않고 전해진다.
  */
-if (!spectate) requestAnimationFrame(tick);
+if (!spectate) startResilientLoop(tick);
 
 /*
  * 글씨체(Galmuri11)가 도착하면 한 장 다시 그린다.
