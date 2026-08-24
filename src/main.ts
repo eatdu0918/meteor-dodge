@@ -143,8 +143,20 @@ function resetGame(): void {
 }
 
 function startGame(): void {
+  notifyParentGameStart();
   resetGame();
   state = 'playing';
+}
+
+/**
+ * 인방모 iframe 호스트(MeteorDodgeGameHost)로 판 시작 알림.
+ *
+ * 호스트가 판 위에 띄운 「기록 저장 완료」 알림을 지우게 하는 신호다 — 다음 판을
+ * 시작했는데 지난 판의 결과가 판 위에 남아 있으면 게임 화면을 가린다.
+ */
+function notifyParentGameStart(): void {
+  if (window.parent === window) return;
+  window.parent.postMessage({ type: 'inbangmo:meteor-dodge:start' }, window.location.origin);
 }
 
 function goToTitle(): void {
