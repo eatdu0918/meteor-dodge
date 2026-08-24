@@ -401,14 +401,13 @@ function tick(now: number): void {
 /**
  * OBS 송출 화면과 주고받는 창구.
  *
- * `capture` 가 시작 화면(title)에서 null 을 내는 이유: 방송에 내보낼 판이 아직 없다.
- * 「송출 화면이 없는 게임」의 기본값이 「비우기」인 것과 같은 판단이다 — 방송 화면에
- * 엉뚱한 것이 떠 있는 쪽이 빈 것보다 위험하다. 끝난 판(gameover)은 결과를 보여 줘야
- * 하므로 보낸다.
+ * **시작 화면(title)도 보낸다.** 예전에는 여기서 null 을 내 방송 화면을 비웠는데,
+ * 그러면 스트리머가 게임을 열어 두고 난이도를 고르는 동안 방송에는 아무것도 안 나갔다.
+ * 시청자가 보는 것이 곧 스트리머가 보고 있는 화면이어야 한다. 시작 화면도 결과 화면도
+ * 캔버스에 그려지므로(drawTitle·drawGameOver) 관전 쪽은 받은 상태로 그대로 그린다.
  */
 installMirrorBridge({
-  capture: (): MeteorDodgeSnapshot | null => {
-    if (state === 'title') return null;
+  capture: (): MeteorDodgeSnapshot => {
     return {
       state,
       level: selectedLevel,
