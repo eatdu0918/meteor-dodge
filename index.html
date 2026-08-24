@@ -19,9 +19,20 @@
         /* 끌어서 조종할 때 부모 페이지가 스크롤되거나 당겨 새로고침되지 않게 */
         overscroll-behavior: none;
       }
+      /*
+       * 판은 16:9 를 지키며 창에 맞춰 줄어든다(display.ts). 창 비율이 16:9 가 아니면
+       * 남는 자리가 생기는데, 예전처럼 왼쪽 위에 붙여 두면 그 여백이 **판 아래에만**
+       * 몰려 "게임 화면이 아래에서 잘린 것"처럼 보인다. 가운데로 세워 위아래(또는
+       * 좌우)로 똑같이 나눈다 — 임베드 창을 16:9 로 잡아 주는 쪽이 먼저지만,
+       * OBS 브라우저 소스처럼 크기를 우리가 못 정하는 곳도 있다.
+       */
+      body {
+        display: grid;
+        place-items: center;
+      }
       #game {
         display: block;
-        margin: 0 auto;
+        margin: 0;
         image-rendering: auto;
         touch-action: none;
         -webkit-user-select: none;
