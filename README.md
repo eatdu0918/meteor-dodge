@@ -13,9 +13,20 @@ npm run dev
 
 ## 해상도
 
-- 게임 월드: **1920×1080** (Full HD)
-- Retina/고DPI: `devicePixelRatio` 최대 2× 적용 (선명한 렌더링)
+- 게임 월드(좌표계): **1920×1080** (Full HD)
+- 실제 캔버스는 **화면에 나오는 크기 그대로** 잡고 좌표만 배율로 맞춘다 — 판 크기로 그린 뒤
+  CSS 로 줄이면 글씨·가는 선이 한 번 더 축소되며 흐려진다(`src/display.ts`)
+- Retina/고DPI: `devicePixelRatio` 최대 2× 적용
 - 창 크기에 맞게 비율 유지하며 전체 화면 표시
+
+## 글씨체
+
+픽셀(비트맵) 글씨체 **Galmuri11** 을 임베드가 직접 들고 다닌다(`src/fonts/`). 보는 사람의
+기기에 따라 글씨가 달라지지 않고, OBS 브라우저 소스에서도 같은 그림이 나온다.
+
+- © 2019–2025 Lee Minseo (quiple@quiple.dev), Reserved Font Name "Galmuri"
+- SIL Open Font License 1.1 — 전문은 `src/fonts/OFL.md`
+- 예약 이름이 걸려 있으므로 **파일을 고쳐 쓰지 않는다**(부분집합을 뽑으려면 이름을 바꿔야 한다)
 
 ## 조작
 

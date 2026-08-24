@@ -1,0 +1,23 @@
+/*
+ * Galmuri11 — 픽셀(비트맵) 글씨체. SIL Open Font License 1.1,
+ * © 2019–2025 Lee Minseo (quiple@quiple.dev), Reserved Font Name "Galmuri".
+ * 라이선스 전문은 src/fonts/OFL.md. 예약된 이름이 있으므로 **고쳐서 쓰지 않는다**
+ * (부분집합만 뽑아 쓰려면 이름을 바꿔야 한다).
+ *
+ * 파일은 vite 가 해시를 박아 dist/assets 로 옮긴다 — 배포 사이에 캐시가 엉키지 않는다.
+ */
+@font-face {
+  font-family: 'Galmuri11';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./fonts/Galmuri11.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Galmuri11';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url('./fonts/Galmuri11-Bold.woff2') format('woff2');
+}

@@ -1,6 +1,9 @@
+import './font.css';
+
 import { drawBackground, Starfield } from './background';
 import { GAME_HEIGHT, GAME_WIDTH, GameState } from './constants';
 import { clientToGame, setupDisplay } from './display';
+import { redrawWhenFontsReady } from './font';
 import {
   computeScore,
   getDifficulty,
@@ -431,3 +434,11 @@ installMirrorBridge({
  * 60Hz 로 다시 그려 봐야 같은 장면을 세 번 그릴 뿐이다.
  */
 if (!spectate) requestAnimationFrame(tick);
+
+/*
+ * 글씨체(Galmuri11)가 도착하면 한 장 다시 그린다.
+ *
+ * 게임 화면은 매 프레임 다시 그리니 저절로 바뀌지만, OBS 송출 화면은 스냅샷이 올 때만
+ * 그린다 — 첫 장이 폰트보다 먼저 오면 대체 글씨가 그대로 방송에 박힌다.
+ */
+redrawWhenFontsReady(draw);
